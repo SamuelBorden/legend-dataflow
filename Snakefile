@@ -1,4 +1,4 @@
-import pathlib, os, json
+import pathlib, os, json, sys
 import scripts as ds
 from scripts.util.patterns import *
 
@@ -9,6 +9,7 @@ subst_vars_in_snakemake_config(workflow, config)
 
 setup = config["setups"]["l200"]
 configs = config_path(setup)
+chan_maps = chan_map_path(setup)
 swenv = runcmd(setup)
 
 basedir = workflow.basedir
@@ -94,15 +95,19 @@ rule autogen_output:
 rule build_raw:
     input:
         get_pattern_tier_daq(setup)
+    params:
+        timestamp = "{timestamp}",
+        datatype = "{datatype}"
     output:
         get_pattern_tier_raw(setup)
     log:
         get_pattern_log(setup, "tier_raw")
     group: "tier-raw"
     resources:
+        mem_swap=110,
         runtime=300
     shell:
-        "{swenv} python3 -B {basedir}/scripts/build_raw.py --log {log} --configs {configs} {input} {output}"
+        "{swenv} python3 -B {basedir}/scripts/build_raw.py --log {log} --configs {configs} --chan_maps {chan_maps} --datatype {params.datatype} --timestamp {params.timestamp} {input} {output}"
 
 rule build_trim:
     input:
@@ -224,14 +229,12 @@ rule build_pars_dsp:
     shell:
         "{swenv} python3 -B {basedir}/scripts/merge_channels.py --input {input} --output {output}"
 
-
 def get_pars_dsp_file(wildcards):
     """
     This function will get the pars file for the run checking the pars_overwrite 
     """
     out = ds.pars_catalog.get_par_file(setup, wildcards.timestamp, "dsp")
     return out
-
 
 rule build_dsp:
     input:
@@ -356,11 +359,10 @@ def get_pars_hit_file(wildcards):
     """
     return ds.pars_catalog.get_par_file(setup, wildcards.timestamp, "hit")
 
-
 rule build_hit:
     input:
         dsp_file = get_pattern_tier_dsp(setup),
-        pars_file = get_pars_hit_file 
+        pars_file = get_pars_hit_file
     output:
         get_pattern_tier_hit(setup)
     params:

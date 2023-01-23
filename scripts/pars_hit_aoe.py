@@ -5,7 +5,7 @@ import argparse
 import logging
 import pickle as pkl
 
-from util.metadata_loading import *
+from legendmeta import LegendMetadata
 
 from pygama.pargen.AoE_cal import cal_aoe
 
@@ -39,9 +39,8 @@ files = sorted(files)
 with open(args.ecal_file, 'r') as o:
     cal_dict = json.load(o)
 
-cfg_file = os.path.join(args.configs, 'key_resolve.jsonl')
-channel_dict = config_catalog.get_config(cfg_file, args.configs, args.timestamp, args.datatype)
-channel_dict = channel_dict['snakemake_rules']['pars_hit_aoecal']["inputs"]['aoecal_config'][args.channel]
+configs = LegendMetadata(path = args.configs)
+channel_dict = configs.on(args.timestamp, system=args.datatype)['snakemake_rules']['pars_hit_aoecal']["inputs"]['aoecal_config'][args.channel]
 
 with open(channel_dict,"r") as r:
     kwarg_dict = json.load(r)
@@ -50,10 +49,21 @@ with open(args.eres_file, 'r') as o:
     eres_dict = json.load(o)
 
 eres_pars = eres_dict[kwarg_dict["cal_energy_param"]]['eres_pars']
+
+if kwarg_dict["run_aoe"] ==True:
+    kwarg_dict.pop("run_aoe")
     
+    if args.plot_file:
+        cal_dict, out_dict,plot_dict = cal_aoe(files, lh5_path=f'{args.channel}/dsp', cal_dict=cal_dict, 
+                                eres_pars=eres_pars, display=1, **kwarg_dict) 
+    else:
+        cal_dict, out_dict,plot_dict = cal_aoe(files, lh5_path=f'{args.channel}/dsp', cal_dict=cal_dict, 
+                                eres_pars=eres_pars, **kwarg_dict) 
+else:
+    out_dict = {}
+    plot_dict = {}
+
 if args.plot_file:
-    cal_dict, out_dict,plot_dict = cal_aoe(files, lh5_path=f'{args.channel}/dsp', cal_dict=cal_dict, 
-                            eres_pars=eres_pars, display=1, **kwarg_dict) 
     if args.inplots:
         with open(args.inplots, "rb") as r:
             out_plot_dict = pkl.load(r)
@@ -64,11 +74,9 @@ if args.plot_file:
     pathlib.Path(os.path.dirname(args.plot_file)).mkdir(parents=True, exist_ok=True)
     with open(args.plot_file, "wb") as w:
         pkl.dump(out_plot_dict, w)
-else:
-    cal_dict, out_dict,plot_dict = cal_aoe(files, lh5_path=f'{args.channel}/dsp', cal_dict=cal_dict, 
-                            eres_pars=eres_pars, **kwarg_dict) 
 
 final_hit_dict = { "operations":cal_dict}
+
 
 
 pathlib.Path(os.path.dirname(args.hit_pars)).mkdir(parents=True, exist_ok=True)
@@ -77,4 +85,4 @@ with open(args.hit_pars, 'w') as w:
 
 pathlib.Path(os.path.dirname(args.aoe_results)).mkdir(parents=True, exist_ok=True)
 with open(args.aoe_results, 'w') as w:
-    json.dump(out_dict,w, indent=4)
+    json.dump({"ecal": eres_dict,"aoe":out_dict},w, indent=4)

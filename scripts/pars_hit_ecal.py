@@ -5,8 +5,8 @@ import argparse
 import logging
 import pickle as pkl
 
-from util.metadata_loading import *
-from util.Props import *
+from legendmeta import LegendMetadata
+from legendmeta.catalog import Props
 
 from pygama.pargen.ecal_th import energy_cal_th
 import pygama.pargen.cuts as cts
@@ -44,12 +44,10 @@ if __name__ == '__main__':
         with open(args.ctc_dict) as f:
             database_dic = json.load(f)
 
-    
     hit_dict = database_dic[args.channel]["ctc_params"]
 
-    cfg_file = os.path.join(args.configs, 'key_resolve.jsonl')
-    channel_dict = config_catalog.get_config(cfg_file, args.configs, args.timestamp, args.datatype)
-    channel_dict = channel_dict['snakemake_rules']['pars_hit_ecal']["inputs"]['ecal_config'][args.channel]
+    configs = LegendMetadata(path = args.configs)
+    channel_dict = configs.on(args.timestamp, system=args.datatype)['snakemake_rules']['pars_hit_ecal']["inputs"]['ecal_config'][args.channel]
 
     with open(channel_dict,"r") as r:
         kwarg_dict = json.load(r)
@@ -58,6 +56,10 @@ if __name__ == '__main__':
         out_dict, result_dict,plot_dict = energy_cal_th(sorted(args.files), lh5_path=f'{args.channel}/dsp', hit_dict=hit_dict, 
                                             display=1, **kwarg_dict)  
 
+        bins = np.arange(-500,500,1)
+        bls = lh5.load_nda(sorted(args.files),["bl_mean"], f'{args.channel}/dsp')["bl_mean"]
+        bl_array, bins,_ = pgh.get_hist(bls, bins=bins)
+        plot_dict["baseline"] = {"bl_array":bl_array, "bins":(bins[1:]+bins[:-1])/2}
         pathlib.Path(os.path.dirname(args.plot_path)).mkdir(parents=True, exist_ok=True)
         with open(args.plot_path,"wb") as f:
             pkl.dump(plot_dict,f)
